@@ -173,7 +173,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
           <div className="flex gap-3 items-end">
             <div className="flex-1 relative">
               <textarea
-                className="w-full px-4 py-3 pr-32 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm"
+                className="w-full px-4 py-3 pr-32 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm text-slate-900 placeholder:text-slate-400"
                 placeholder="Ask a question..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
