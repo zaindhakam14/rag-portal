@@ -2,38 +2,54 @@
 export const runtime = 'nodejs';
 
 import type { NextRequest } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: NextRequest) {
   try {
     const { chatInput, sessionId } = await req.json();
 
+    // Extract accountId from sessionId (format: "accountId:randomId")
+    const accountId = sessionId?.split(':')[0] || 'public';
+
+    // Fetch webhook configuration for this account
+    const supabase = await createClient();
+    const { data: webhookConfig, error } = await supabase
+      .from('account_webhooks')
+      .select('webhook_url, webhook_auth')
+      .eq('account_id', accountId)
+      .single();
+
+    if (error || !webhookConfig) {
+      return new Response(
+        JSON.stringify({ error: `No webhook configured for account: ${accountId}` }),
+        { status: 404, headers: { 'content-type': 'application/json' } }
+      );
+    }
+
     // Build the payload shape your n8n workflow expects
     const payload = {
-      chatInput: chatInput,            // <-- important: key is `input`
-      sessionId: sessionId ?? '' // keep a stable id per user/browser
+      chatInput: chatInput,
+      sessionId: sessionId ?? '',
+      accountId: accountId
     };
-
-    const url = process.env.N8N_WEBHOOK_URL!;
-    const basic = process.env.N8N_WEBHOOK_BASIC ?? ''; // "user:pass", optional
 
     const headers: Record<string, string> = {
       'content-type': 'application/json',
     };
 
-    if (basic) {
+    if (webhookConfig.webhook_auth) {
       // Basic Auth header
       headers['authorization'] =
-        'Basic ' + Buffer.from(basic, 'utf8').toString('base64');
+        'Basic ' + Buffer.from(webhookConfig.webhook_auth, 'utf8').toString('base64');
     }
 
-    const r = await fetch(url, {
+    const r = await fetch(webhookConfig.webhook_url, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-      // Let n8n return whatever JSON it wants
     });
 
-    // Pass through n8n’s response (and status) to the client
+    // Pass through n8n's response (and status) to the client
     const text = await r.text();
     return new Response(text, {
       status: r.status,
@@ -46,4 +62,9 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+
+
+
+
 
