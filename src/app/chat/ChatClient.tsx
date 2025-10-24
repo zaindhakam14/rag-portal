@@ -1,4 +1,3 @@
-//chat client
 'use client';
 import { useEffect, useState, useRef } from 'react';
 
@@ -57,9 +56,18 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col relative overflow-hidden">
+      {/* Animated Background Circles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+        <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+        <div className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-pink-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
+        <div className="absolute top-1/2 right-1/3 w-80 h-80 bg-indigo-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-6000"></div>
+        <div className="absolute bottom-1/3 right-1/2 w-72 h-72 bg-cyan-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-8000"></div>
+      </div>
+
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 shadow-sm">
+      <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200 shadow-sm relative z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
@@ -80,7 +88,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
       </div>
 
       {/* Messages Container */}
-      <div className="flex-1 max-w-4xl w-full mx-auto px-6 py-8 overflow-y-auto">
+      <div className="flex-1 max-w-4xl w-full mx-auto px-6 py-8 overflow-y-auto relative z-10">
         {msgs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center mb-6 shadow-lg">
@@ -95,7 +103,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                 <button
                   key={i}
                   onClick={() => setInput(suggestion)}
-                  className="px-4 py-3 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-left text-sm text-slate-700 shadow-sm hover:shadow"
+                  className="px-4 py-3 bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/80 transition-all text-left text-sm text-slate-700 shadow-sm hover:shadow"
                 >
                   {suggestion}
                 </button>
@@ -128,7 +136,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                   <div className={`px-4 py-3 rounded-2xl ${
                     m.role === 'user'
                       ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md'
-                      : 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                      : 'bg-white/80 backdrop-blur-sm text-slate-900 shadow-sm border border-slate-200'
                   }`}>
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
                   </div>
@@ -144,7 +152,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
                 </div>
-                <div className="bg-white px-4 py-3 rounded-2xl shadow-sm border border-slate-200">
+                <div className="bg-white/80 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-sm border border-slate-200">
                   <div className="flex gap-1">
                     <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                     <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
@@ -160,7 +168,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
       </div>
 
       {/* Input Area */}
-      <div className="bg-white border-t border-slate-200 shadow-lg">
+      <div className="bg-white/80 backdrop-blur-sm border-t border-slate-200 shadow-lg relative z-10">
         <div className="max-w-4xl mx-auto px-6 py-4">
           {err && (
             <div className="mb-3 px-4 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
@@ -174,7 +182,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
           <form onSubmit={send} className="flex gap-3 items-end">
             <div className="flex-1 relative">
               <textarea
-                className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm"
+                className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm bg-white"
                 placeholder="Ask a question..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -229,8 +237,41 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
             transform: translateY(0);
           }
         }
+        
+        @keyframes blob {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+          }
+          33% {
+            transform: translate(30px, -50px) scale(1.1);
+          }
+          66% {
+            transform: translate(-20px, 20px) scale(0.9);
+          }
+        }
+        
         .animate-fade-in {
           animation: fade-in 0.3s ease-out;
+        }
+        
+        .animate-blob {
+          animation: blob 20s infinite;
+        }
+        
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+        
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+        
+        .animation-delay-6000 {
+          animation-delay: 6s;
+        }
+        
+        .animation-delay-8000 {
+          animation-delay: 8s;
         }
       `}</style>
     </div>
