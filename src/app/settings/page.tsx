@@ -1,189 +1,188 @@
 'use client';
+
 import { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 
 export default function SettingsPage() {
-  const [userName, setUserName] = useState('');
-  const [userEmail, setUserEmail] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [successMessage, setSuccessMessage] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
-  // Load saved data when component mounts
   useEffect(() => {
-    const savedName = localStorage.getItem('user_name');
-    const savedEmail = localStorage.getItem('user_email');
-    const savedCompany = localStorage.getItem('company_name');
+    const loadUser = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      
+      setUser(user);
+      setIsLoading(false);
+    };
     
-    if (savedName) setUserName(savedName);
-    if (savedEmail) setUserEmail(savedEmail);
-    if (savedCompany) setCompanyName(savedCompany);
-  }, []);
+    loadUser();
+  }, [router]);
 
-  async function handleSave() {
-    setSaving(true);
-    setSuccessMessage(false);
-    
-    // Save to localStorage
-    localStorage.setItem('user_name', userName);
-    localStorage.setItem('user_email', userEmail);
-    localStorage.setItem('company_name', companyName);
-    
-    // Simulate saving delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setSaving(false);
-    setSuccessMessage(true);
-    
-    // Hide success message after 3 seconds
-    setTimeout(() => setSuccessMessage(false), 3000);
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#f5f0e0] via-[#ede8d0] to-[#e5e0c8] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 border-4 border-[#d8d3bd] border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-[#6b6550]">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
-  const userInitials = userName ? userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '?';
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <div className="bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-4xl mx-auto px-6 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#f5f0e0] via-[#ede8d0] to-[#e5e0c8] relative overflow-hidden">
+      {/* Decorative elements */}
+      <div className="absolute top-20 right-20 w-32 h-32 border-2 border-[#d8d3bd] rounded-full opacity-20"></div>
+      <div className="absolute bottom-32 left-16 w-24 h-24 border-2 border-[#d8d3bd] opacity-15 rotate-45"></div>
+
+      {/* Header */}
+      <div className="bg-white/30 backdrop-blur-sm border-b border-[#d8d3bd] shadow-sm">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <a href="/chat" className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-              <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <div className="w-10 h-10 bg-gradient-to-br from-[#d8d3bd] to-[#cac5af] rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-[#f5f0e0]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
               </svg>
-            </a>
+            </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-900">Settings</h1>
-              <p className="text-sm text-slate-500">Manage your profile information</p>
+              <h1 className="text-lg font-semibold text-[#3d3935]">Settings</h1>
+              <p className="text-sm text-[#6b6550]">Manage your account</p>
+            </div>
+          </div>
+          <a
+            href="/chat"
+            className="text-[#6b6550] hover:text-[#3d3935] transition-colors"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </a>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto px-6 py-12">
+        <div className="space-y-6">
+          {/* Account Information Card */}
+          <div className="bg-white/50 backdrop-blur-lg rounded-2xl p-8 border border-[#d8d3bd] shadow-lg">
+            <h2 className="text-2xl font-light text-[#3d3935] mb-6 flex items-center gap-3">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+              </svg>
+              Account Information
+            </h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#6b6550] mb-2">Email</label>
+                <div className="px-4 py-3 bg-white/50 backdrop-blur border border-[#d8d3bd] rounded-xl text-[#3d3935]">
+                  {user?.email}
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-[#6b6550] mb-2">User ID</label>
+                <div className="px-4 py-3 bg-white/50 backdrop-blur border border-[#d8d3bd] rounded-xl text-[#3d3935] font-mono text-sm break-all">
+                  {user?.id}
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-[#6b6550] mb-2">Account Created</label>
+                <div className="px-4 py-3 bg-white/50 backdrop-blur border border-[#d8d3bd] rounded-xl text-[#3d3935]">
+                  {user?.created_at ? new Date(user.created_at).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  }) : 'N/A'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions Card */}
+          <div className="bg-white/50 backdrop-blur-lg rounded-2xl p-8 border border-[#d8d3bd] shadow-lg">
+            <h2 className="text-2xl font-light text-[#3d3935] mb-6 flex items-center gap-3">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+              </svg>
+              Quick Actions
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <a
+                href="/chat"
+                className="p-4 bg-gradient-to-r from-[#d8d3bd] to-[#cac5af] hover:from-[#cac5af] hover:to-[#b8b39d] rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-3 text-[#3d3935]"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                </svg>
+                <span className="font-medium">Go to Chat</span>
+              </a>
+              
+              <button
+                onClick={handleLogout}
+                className="p-4 bg-white/50 backdrop-blur hover:bg-white/70 border border-[#d8d3bd] rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-3 text-[#3d3935]"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                </svg>
+                <span className="font-medium">Sign Out</span>
+              </button>
+            </div>
+          </div>
+
+          {/* About Card */}
+          <div className="bg-white/50 backdrop-blur-lg rounded-2xl p-8 border border-[#d8d3bd] shadow-lg">
+            <h2 className="text-2xl font-light text-[#3d3935] mb-6 flex items-center gap-3">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              About
+            </h2>
+            
+            <div className="space-y-3 text-[#6b6550]">
+              <p className="flex items-center gap-2">
+                <span className="font-medium text-[#3d3935]">Version:</span> 1.0.0
+              </p>
+              <p className="flex items-center gap-2">
+                <span className="font-medium text-[#3d3935]">Platform:</span> RAG Knowledge Assistant
+              </p>
+              <p className="flex items-center gap-2">
+                <span className="font-medium text-[#3d3935]">Status:</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></span>
+                  Online
+                </span>
+              </p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        {successMessage && (
-          <div className="mb-6 px-4 py-3 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3 text-sm text-green-700">
-            <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            Profile updated successfully!
-          </div>
-        )}
-
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-          <div className="p-6 border-b border-slate-200">
-            <h2 className="text-xl font-semibold text-slate-900">Profile Information</h2>
-            <p className="text-sm text-slate-500 mt-1">Update your personal and company details</p>
-          </div>
-          
-          <div className="p-6 space-y-6">
-            <div className="flex items-center gap-4">
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                {userInitials}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-slate-900 mb-1">Profile Picture</p>
-                <p className="text-xs text-slate-500">Your initials will be displayed</p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  placeholder="Enter your full name"
-                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <input
-                  type="email"
-                  value={userEmail}
-                  onChange={(e) => setUserEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Company Name</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="Your company name"
-                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 pt-4">
-              <button
-                onClick={handleSave}
-                disabled={saving || (!userName && !userEmail && !companyName)}
-                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all shadow-md hover:shadow-lg flex items-center gap-2"
-              >
-                {saving ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Save Changes
-                  </>
-                )}
-              </button>
-              <a href="/chat" className="px-6 py-3 text-slate-700 hover:bg-slate-100 rounded-xl font-medium transition-colors">
-                Cancel
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h4 className="font-semibold text-slate-900 mb-1">About Your Profile</h4>
-              <p className="text-sm text-slate-700">
-                Your profile information is saved locally in your browser and will persist across sessions.
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* Wave decoration at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 opacity-5 pointer-events-none">
+        <svg viewBox="0 0 1200 120" className="w-full text-[#cac5af]">
+          <path
+            d="M0,50 C300,100 600,0 900,50 C1050,75 1125,50 1200,50 L1200,120 L0,120 Z"
+            fill="currentColor"
+          />
+        </svg>
       </div>
     </div>
   );
