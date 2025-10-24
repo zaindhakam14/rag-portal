@@ -1,3 +1,5 @@
+//chat route ts file
+
 // Ensure Node runtime so Buffer is available
 export const runtime = 'nodejs';
 
