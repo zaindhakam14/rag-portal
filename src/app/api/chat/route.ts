@@ -1,20 +1,19 @@
-//chat route ts file
 
-// Ensure Node runtime so Buffer is available
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 import type { NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 
 export async function POST(req: NextRequest) {
   try {
     const { chatInput, sessionId } = await req.json();
 
-    // Extract accountId from sessionId (format: "accountId:randomId")
+    // sessionId format is "accountId:random"
     const accountId = sessionId?.split(':')[0] || 'public';
 
-    // Fetch webhook configuration for this account
-    const supabase = await createClient();
+    // Use service role so RLS doesn't block reading account_webhooks
+    const supabase = createServiceClient();
     const { data: webhookConfig, error } = await supabase
       .from('account_webhooks')
       .select('webhook_url, webhook_auth')
@@ -28,20 +27,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Build the payload shape your n8n workflow expects
     const payload = {
-      chatInput: chatInput,
+      chatInput: chatInput ?? '',
       sessionId: sessionId ?? '',
-      accountId: accountId
+      accountId,
     };
 
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-    };
-
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (webhookConfig.webhook_auth) {
-      // Basic Auth header
-      headers['authorization'] =
+      headers.authorization =
         'Basic ' + Buffer.from(webhookConfig.webhook_auth, 'utf8').toString('base64');
     }
 
@@ -51,12 +45,22 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(payload),
     });
 
-    // Pass through n8n's response (and status) to the client
-    const text = await r.text();
-    return new Response(text, {
-      status: r.status,
-      headers: { 'content-type': r.headers.get('content-type') ?? 'application/json' },
-    });
+    const ct = r.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      // pass JSON straight through
+      const json = await r.text();
+      return new Response(json, {
+        status: r.status,
+        headers: { 'content-type': 'application/json' },
+      });
+    } else {
+      // coerce text/other to JSON with a 'reply' field
+      const text = await r.text();
+      return new Response(JSON.stringify({ reply: text }), {
+        status: r.status,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
   } catch (err: any) {
     return new Response(
       JSON.stringify({ error: err?.message ?? 'Unknown error' }),
@@ -64,9 +68,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-
-
-
-
-
-
