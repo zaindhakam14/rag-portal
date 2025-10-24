@@ -43,3 +43,6 @@ next-env.d.ts
 .env.local
 *.backup
 *.backup2
+
+# Local backups
+*.bak
