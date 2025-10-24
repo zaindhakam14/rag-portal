@@ -13,27 +13,23 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
   const [err, setErr] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // keep a small local cache per-account so we don't flash empty while navigating
   const storageKey = useMemo(() => `rag-chat-cache:${accountId}`, [accountId]);
 
-  // Fetch canonical session from server
+  // Resolve canonical session
   useEffect(() => {
     (async () => {
       try {
         const r = await fetch(`/api/session/current?account=${encodeURIComponent(accountId)}`, { cache: 'no-store' });
         const j = await r.json();
-        if (j?.sessionId) {
-          setSessionId(j.sessionId);
-        } else {
-          setErr(j?.error || 'Failed to get session');
-        }
+        if (j?.sessionId) setSessionId(j.sessionId);
+        else setErr(j?.error || 'Failed to get session');
       } catch (e: any) {
         setErr(e?.message || 'Failed to get session');
       }
     })();
   }, [accountId]);
 
-  // Load history for that session
+  // Load history
   useEffect(() => {
     if (!sessionId) return;
     (async () => {
@@ -46,12 +42,13 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
           timestamp: new Date(m.created_at),
         }));
         setMsgs(history);
-        // cache last known transcript locally as a fast restore
         try {
-          localStorage.setItem(storageKey, JSON.stringify(history.map(m => ({ ...m, timestamp: m.timestamp.toISOString() }))));
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify(history.map(m => ({ ...m, timestamp: m.timestamp.toISOString() }))),
+          );
         } catch {}
-      } catch (e: any) {
-        // try cache as a soft fallback
+      } catch {
         try {
           const raw = localStorage.getItem(storageKey);
           if (raw) {
@@ -63,7 +60,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
     })();
   }, [sessionId, storageKey]);
 
-  // auto-scroll on new messages
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [msgs, loading]);
@@ -84,18 +81,13 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ chatInput: userMsg.content, sessionId }),
       });
-
       let reply = '';
       try {
         const data = await res.json();
         reply = (data?.reply ?? data?.text ?? '').toString();
-      } catch {
-        // noop: reply stays ''
-      }
-
+      } catch {}
       setMsgs(m => [...m, { role: 'assistant', content: reply, timestamp: new Date() }]);
 
-      // refresh cache (optional – we already saved server-side)
       try {
         const serializable = [...msgs, userMsg, { role: 'assistant', content: reply, timestamp: new Date() }].map(m => ({
           ...m, timestamp: m.timestamp.toISOString(),
@@ -104,6 +96,29 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
       } catch {}
     } catch (e: any) {
       setErr(e?.message ?? 'Failed to send message');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function clearChat() {
+    if (!sessionId) return;
+    const yes = window.confirm('Clear this conversation for all your devices? This cannot be undone.');
+    if (!yes) return;
+
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/history?sessionId=${encodeURIComponent(sessionId)}&mode=reset`, {
+        method: 'DELETE',
+      });
+      const j = await r.json();
+      const nextId = j?.sessionId || sessionId;
+
+      setMsgs([]);
+      setSessionId(nextId);
+      try { localStorage.removeItem(storageKey); } catch {}
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to clear chat');
     } finally {
       setLoading(false);
     }
@@ -120,7 +135,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707" />
               </svg>
             </div>
             <div>
@@ -130,9 +145,20 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-sm text-slate-600">Online</span>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={clearChat}
+              className="px-3 py-2 rounded-lg border border-slate-200 bg-white/80 hover:bg-white shadow-sm text-sm text-slate-700 transition"
+              title="Clear this conversation for all devices"
+              disabled={!sessionId || loading}
+            >
+              Clear chat
+            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span className="text-sm text-slate-600">Online</span>
+            </div>
           </div>
         </div>
       </div>
@@ -150,7 +176,11 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
             <p className="text-slate-500 max-w-md mb-6">Ask questions about your business data, documents, and more.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
               {['What products do we offer?', 'Show me our latest sales data', 'Who are our key clients?', 'What are our company values?'].map((s, i) => (
-                <button key={i} onClick={() => setInput(s)} className="px-4 py-3 bg-white/80 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-left text-sm text-slate-700 shadow-sm hover:shadow">
+                <button
+                  key={i}
+                  onClick={() => setInput(s)}
+                  className="px-4 py-3 bg-white/80 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-left text-sm text-slate-700 shadow-sm hover:shadow"
+                >
                   {s}
                 </button>
               ))}
@@ -160,7 +190,9 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
           <div className="space-y-6">
             {msgs.map((m, i) => (
               <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'} animate-fade-in`}>
-                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${m.role === 'user' ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-slate-200 to-slate-300'}`}>
+                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                  m.role === 'user' ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-slate-200 to-slate-300'
+                }`}>
                   {m.role === 'user' ? (
                     <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
@@ -172,7 +204,9 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                   )}
                 </div>
                 <div className={`flex flex-col gap-1 max-w-2xl ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  <div className={`px-4 py-3 rounded-2xl ${m.role === 'user' ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md' : 'bg-white/90 text-slate-900 shadow-sm border border-slate-200'}`}>
+                  <div className={`px-4 py-3 rounded-2xl ${m.role === 'user'
+                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md'
+                      : 'bg-white/90 text-slate-900 shadow-sm border border-slate-200'}`}>
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
                   </div>
                   <span className="text-xs text-slate-400 px-2">{formatTime(m.timestamp)}</span>
@@ -188,9 +222,9 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                 </div>
                 <div className="bg-white/90 px-4 py-3 rounded-2xl shadow-sm border border-slate-200">
                   <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <div className="w-2 h-2 rounded-full animate-bounce bg-slate-400" />
+                    <div className="w-2 h-2 rounded-full animate-bounce bg-slate-400" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 rounded-full animate-bounce bg-slate-400" style={{ animationDelay: '300ms' }} />
                   </div>
                 </div>
               </div>
@@ -219,12 +253,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                 placeholder="Ask a question..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    send(e);
-                  }
-                }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(e); } }}
                 rows={1}
                 style={{ minHeight: '48px', maxHeight: '120px' }}
               />
@@ -258,10 +287,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
       </div>
 
       <style jsx>{`
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fade-in 0.3s ease-out; }
       `}</style>
     </div>
