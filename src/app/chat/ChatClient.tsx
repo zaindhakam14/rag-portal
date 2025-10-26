@@ -2,7 +2,8 @@
 import { useEffect, useState, useRef } from 'react';
 
 // Mock uuid for demo - in your real app, you'll import from 'uuid'
-const uuid = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
+const uuid = () =>
+  Math.random().toString(36).substring(2) + Date.now().toString(36);
 
 type Msg = { role: 'user' | 'assistant'; content: string; timestamp: Date };
 
@@ -29,13 +30,12 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
     if (!input.trim() || loading) return;
 
     const userMsg: Msg = { role: 'user', content: input.trim(), timestamp: new Date() };
-    setMsgs(m => [...m, userMsg]);
+    setMsgs((m) => [...m, userMsg]);
     setInput('');
     setErr(null);
     setLoading(true);
 
     try {
-      // In real app, this would call your API
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -43,7 +43,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
       });
       const data = await res.json();
       const reply = (data?.reply ?? data?.text ?? '').toString();
-      setMsgs(m => [...m, { role: 'assistant', content: reply, timestamp: new Date() }]);
+      setMsgs((m) => [...m, { role: 'assistant', content: reply, timestamp: new Date() }]);
     } catch (e: any) {
       setErr(e?.message ?? 'Failed to send message');
     } finally {
@@ -51,19 +51,82 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
     }
   }
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  };
+  const formatTime = (date: Date) =>
+    date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col relative overflow-hidden">
-      {/* Animated Background Circles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
-        <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
-        <div className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-pink-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
-        <div className="absolute top-1/2 right-1/3 w-80 h-80 bg-indigo-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-6000"></div>
-        <div className="absolute bottom-1/3 right-1/2 w-72 h-72 bg-cyan-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-8000"></div>
+      {/* --- Layer -20: Subtle tiled cube/tesseract pattern --- */}
+      <div className="pointer-events-none fixed inset-0 -z-20">
+        <svg
+          className="w-full h-full text-slate-300 opacity-[0.18]"
+          aria-hidden="true"
+        >
+          <defs>
+            {/* A repeatable pattern tile; adjust width/height to tune density */}
+            <pattern
+              id="cubePattern"
+              width="220"
+              height="220"
+              patternUnits="userSpaceOnUse"
+            >
+              <g transform="translate(40,48)" stroke="currentColor" strokeWidth="1">
+                {/* back square */}
+                <rect x="16" y="-16" width="120" height="120" fill="none" opacity=".35" />
+                {/* front square */}
+                <rect x="0" y="0" width="120" height="120" fill="none" opacity=".35" />
+                {/* connectors */}
+                <line x1="0" y1="0" x2="16" y2="-16" opacity=".35" />
+                <line x1="120" y1="0" x2="136" y2="-16" opacity=".35" />
+                <line x1="0" y1="120" x2="16" y2="104" opacity=".35" />
+                <line x1="120" y1="120" x2="136" y2="104" opacity=".35" />
+                {/* corner dots */}
+                {[
+                  [0, 0], [120, 0], [0, 120], [120, 120],
+                  [16, -16], [136, -16], [16, 104], [136, 104],
+                ].map(([cx, cy], i) => (
+                  <circle key={i} cx={cx} cy={cy} r="2.2" fill="currentColor" opacity=".35" />
+                ))}
+              </g>
+            </pattern>
+          </defs>
+          {/* Use the pattern to fill the viewport. Mask to fade at very top/bottom */}
+          <rect
+            width="100%"
+            height="100%"
+            fill="url(#cubePattern)"
+            style={{
+              WebkitMaskImage:
+                'linear-gradient(to bottom, transparent, black 8%, black 92%, transparent)',
+              maskImage:
+                'linear-gradient(to bottom, transparent, black 8%, black 92%, transparent)',
+            }}
+          />
+        </svg>
+      </div>
+
+      {/* --- Layer -10: Animated color blobs --- */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div
+          className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-blue-400 mix-blend-multiply filter blur-3xl opacity-40 animate-blob"
+          style={{ willChange: 'transform' }}
+        />
+        <div
+          className="absolute top-1/3 right-1/4 w-96 h-96 rounded-full bg-purple-400 mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-2000"
+          style={{ willChange: 'transform' }}
+        />
+        <div
+          className="absolute bottom-1/4 left-1/3 w-96 h-96 rounded-full bg-pink-400 mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-4000"
+          style={{ willChange: 'transform' }}
+        />
+        <div
+          className="absolute top-1/2 right-1/3 w-80 h-80 rounded-full bg-indigo-400 mix-blend-multiply filter blur-3xl opacity-35 animate-blob animation-delay-6000"
+          style={{ willChange: 'transform' }}
+        />
+        <div
+          className="absolute bottom-1/3 right-1/2 w-72 h-72 rounded-full bg-cyan-400 mix-blend-multiply filter blur-3xl opacity-35 animate-blob animation-delay-8000"
+          style={{ willChange: 'transform' }}
+        />
       </div>
 
       {/* Header */}
@@ -81,7 +144,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
             <span className="text-sm text-slate-600">Online</span>
           </div>
         </div>
@@ -97,9 +160,16 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
               </svg>
             </div>
             <h2 className="text-2xl font-semibold text-slate-900 mb-2">Start a conversation</h2>
-            <p className="text-slate-500 max-w-md mb-6">Ask questions about your business data, documents, and more. I'm here to help!</p>
+            <p className="text-slate-500 max-w-md mb-6">
+              Ask questions about your business data, documents, and more. I'm here to help!
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
-              {['What products do we offer?', 'Show me our latest sales data', 'Who are our key clients?', 'What are our company values?'].map((suggestion, i) => (
+              {[
+                'What products do we offer?',
+                'Show me our latest sales data',
+                'Who are our key clients?',
+                'What are our company values?',
+              ].map((suggestion, i) => (
                 <button
                   key={i}
                   onClick={() => setInput(suggestion)}
@@ -113,31 +183,42 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         ) : (
           <div className="space-y-6">
             {msgs.map((m, i) => (
-              <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'} animate-fade-in`}>
+              <div
+                key={i}
+                className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'} animate-fade-in`}
+              >
                 {/* Avatar */}
-                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                  m.role === 'user' 
-                    ? 'bg-gradient-to-br from-blue-500 to-indigo-600' 
-                    : 'bg-gradient-to-br from-slate-200 to-slate-300'
-                }`}>
+                <div
+                  className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                    m.role === 'user'
+                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600'
+                      : 'bg-gradient-to-br from-slate-200 to-slate-300'
+                  }`}
+                >
                   {m.role === 'user' ? (
                     <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                      <path
+                        fillRule="evenodd"
+                        d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   ) : (
                     <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547z" />
                     </svg>
                   )}
                 </div>
 
                 {/* Message Bubble */}
                 <div className={`flex flex-col gap-1 max-w-2xl ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  <div className={`px-4 py-3 rounded-2xl ${
-                    m.role === 'user'
-                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md'
-                      : 'bg-white/80 backdrop-blur-sm text-slate-900 shadow-sm border border-slate-200'
-                  }`}>
+                  <div
+                    className={`px-4 py-3 rounded-2xl ${
+                      m.role === 'user'
+                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md'
+                        : 'bg-white/80 backdrop-blur-sm text-slate-900 shadow-sm border border-slate-200'
+                    }`}
+                  >
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
                   </div>
                   <span className="text-xs text-slate-400 px-2">{formatTime(m.timestamp)}</span>
@@ -149,14 +230,14 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
               <div className="flex gap-3 animate-fade-in">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center">
                   <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707" />
                   </svg>
                 </div>
                 <div className="bg-white/80 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-sm border border-slate-200">
                   <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                 </div>
               </div>
@@ -173,12 +254,16 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
           {err && (
             <div className="mb-3 px-4 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
               <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                  clipRule="evenodd"
+                />
               </svg>
               {err}
             </div>
           )}
-          
+
           <form onSubmit={send} className="flex gap-3 items-end">
             <div className="flex-1 relative">
               <textarea
@@ -195,11 +280,9 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                 rows={1}
                 style={{ minHeight: '48px', maxHeight: '120px' }}
               />
-              <div className="absolute right-3 bottom-3 text-xs text-slate-400">
-                Press Enter to send
-              </div>
+              <div className="absolute right-3 bottom-3 text-xs text-slate-400">Press Enter to send</div>
             </div>
-            
+
             <button
               type="submit"
               disabled={loading || !input.trim()}
@@ -208,8 +291,12 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
               {loading ? (
                 <>
                   <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
                   Sending
                 </>
@@ -226,53 +313,24 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         </div>
       </div>
 
+      {/* Local animations */}
       <style jsx>{`
         @keyframes fade-in {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
-        
-        @keyframes blob {
-          0%, 100% {
-            transform: translate(0, 0) scale(1);
-          }
-          33% {
-            transform: translate(30px, -50px) scale(1.1);
-          }
-          66% {
-            transform: translate(-20px, 20px) scale(0.9);
-          }
+        /* Make keyframes available globally for Safari/styled-jsx */
+        :global(@keyframes blob) {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33%      { transform: translate(30px, -50px) scale(1.1); }
+          66%      { transform: translate(-20px, 20px) scale(0.9); }
         }
-        
-        .animate-fade-in {
-          animation: fade-in 0.3s ease-out;
-        }
-        
-        .animate-blob {
-          animation: blob 20s infinite;
-        }
-        
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-        
-        .animation-delay-6000 {
-          animation-delay: 6s;
-        }
-        
-        .animation-delay-8000 {
-          animation-delay: 8s;
-        }
+        .animate-fade-in { animation: fade-in 0.3s ease-out; }
+        .animate-blob    { animation: blob 20s ease-in-out infinite; }
+        .animation-delay-2000 { animation-delay: 2s; }
+        .animation-delay-4000 { animation-delay: 4s; }
+        .animation-delay-6000 { animation-delay: 6s; }
+        .animation-delay-8000 { animation-delay: 8s; }
       `}</style>
     </div>
   );
