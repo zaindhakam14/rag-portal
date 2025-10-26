@@ -55,7 +55,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
     date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex flex-col relative overflow-hidden">
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
       {/* --- Layer -20: Subtle tiled cube/tesseract pattern --- */}
       <div className="pointer-events-none fixed inset-0 -z-20">
         <svg
@@ -108,23 +108,35 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
       {/* --- Layer -10: Animated color blobs --- */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div
-          className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-blue-400 mix-blend-multiply filter blur-3xl opacity-40 animate-blob"
+          className="absolute top-[15%] left-[20%] w-20 h-20 rounded-full bg-blue-400 mix-blend-multiply filter blur-3xl opacity-50 animate-blob"
           style={{ willChange: 'transform' }}
         />
         <div
-          className="absolute top-1/3 right-1/4 w-96 h-96 rounded-full bg-purple-400 mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-2000"
+          className="absolute top-[25%] right-[15%] w-16 h-16 rounded-full bg-purple-400 mix-blend-multiply filter blur-3xl opacity-45 animate-blob animation-delay-2000"
           style={{ willChange: 'transform' }}
         />
         <div
-          className="absolute bottom-1/4 left-1/3 w-96 h-96 rounded-full bg-pink-400 mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-4000"
+          className="absolute top-[60%] left-[10%] w-24 h-24 rounded-full bg-pink-400 mix-blend-multiply filter blur-3xl opacity-50 animate-blob animation-delay-4000"
           style={{ willChange: 'transform' }}
         />
         <div
-          className="absolute top-1/2 right-1/3 w-80 h-80 rounded-full bg-indigo-400 mix-blend-multiply filter blur-3xl opacity-35 animate-blob animation-delay-6000"
+          className="absolute top-[45%] right-[25%] w-20 h-20 rounded-full bg-indigo-400 mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-6000"
           style={{ willChange: 'transform' }}
         />
         <div
-          className="absolute bottom-1/3 right-1/2 w-72 h-72 rounded-full bg-cyan-400 mix-blend-multiply filter blur-3xl opacity-35 animate-blob animation-delay-8000"
+          className="absolute bottom-[20%] left-[45%] w-16 h-16 rounded-full bg-cyan-400 mix-blend-multiply filter blur-3xl opacity-45 animate-blob animation-delay-8000"
+          style={{ willChange: 'transform' }}
+        />
+        <div
+          className="absolute top-[35%] left-[60%] w-20 h-20 rounded-full bg-rose-400 mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-3000"
+          style={{ willChange: 'transform' }}
+        />
+        <div
+          className="absolute bottom-[35%] right-[35%] w-24 h-24 rounded-full bg-violet-400 mix-blend-multiply filter blur-3xl opacity-45 animate-blob animation-delay-5000"
+          style={{ willChange: 'transform' }}
+        />
+        <div
+          className="absolute top-[70%] right-[20%] w-16 h-16 rounded-full bg-teal-400 mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-7000"
           style={{ willChange: 'transform' }}
         />
       </div>
@@ -165,10 +177,10 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
               {[
-                'What products do we offer?',
-                'Show me our latest sales data',
-                'Who are our key clients?',
-                'What are our company values?',
+                'What were our sales last quarter?',
+                'Summarize recent customer feedback',
+                'Show me team performance metrics',
+                'What are the upcoming deadlines?',
               ].map((suggestion, i) => (
                 <button
                   key={i}
@@ -328,8 +340,11 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         .animate-fade-in { animation: fade-in 0.3s ease-out; }
         .animate-blob    { animation: blob 20s ease-in-out infinite; }
         .animation-delay-2000 { animation-delay: 2s; }
+        .animation-delay-3000 { animation-delay: 3s; }
         .animation-delay-4000 { animation-delay: 4s; }
+        .animation-delay-5000 { animation-delay: 5s; }
         .animation-delay-6000 { animation-delay: 6s; }
+        .animation-delay-7000 { animation-delay: 7s; }
         .animation-delay-8000 { animation-delay: 8s; }
       `}</style>
     </div>
