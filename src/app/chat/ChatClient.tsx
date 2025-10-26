@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
 
-// Mock uuid for demo - in your real app, you'll import from 'uuid'
+// Mock uuid for demo - in your real app, import from 'uuid'
 const uuid = () =>
   Math.random().toString(36).substring(2) + Date.now().toString(36);
 
@@ -15,15 +15,24 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
   const [err, setErr] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Persist a session id per browser
   useEffect(() => {
     const base = localStorage.getItem('rag-session-id') || uuid();
     localStorage.setItem('rag-session-id', base);
     setSessionId(`${accountId}:${base}`);
   }, [accountId]);
 
+  // Always show latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [msgs, loading]);
+
+  // Enforce light mode in the browser
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('dark');      // if Tailwind darkMode: 'class'
+    root.style.colorScheme = 'light';   // ask browsers to use light widgets
+  }, []);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -56,56 +65,54 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden">
-      {/* --- Layer -20: Subtle tiled cube/tesseract pattern --- */}
+      {/* --- Layer -20: Stronger tiled cube/tesseract pattern --- */}
       <div className="pointer-events-none fixed inset-0 -z-20">
-        <svg
-          className="w-full h-full text-slate-300 opacity-[0.18]"
-          aria-hidden="true"
-        >
+        <svg className="w-full h-full text-slate-400 opacity-[0.32]" aria-hidden="true">
           <defs>
-            {/* A repeatable pattern tile; adjust width/height to tune density */}
-            <pattern
-              id="cubePattern"
-              width="220"
-              height="220"
-              patternUnits="userSpaceOnUse"
-            >
-              <g transform="translate(40,48)" stroke="currentColor" strokeWidth="1">
-                {/* back square */}
-                <rect x="16" y="-16" width="120" height="120" fill="none" opacity=".35" />
-                {/* front square */}
-                <rect x="0" y="0" width="120" height="120" fill="none" opacity=".35" />
+            {/* Repeatable pattern tile */}
+            <pattern id="cubePattern" width="220" height="220" patternUnits="userSpaceOnUse">
+              <g
+                transform="translate(40,48)"
+                stroke="currentColor"
+                strokeWidth="1.25"
+                strokeOpacity=".55"
+                fill="none"
+              >
+                {/* back + front squares */}
+                <rect x="16" y="-16" width="120" height="120" />
+                <rect x="0"  y="0"    width="120" height="120" />
                 {/* connectors */}
-                <line x1="0" y1="0" x2="16" y2="-16" opacity=".35" />
-                <line x1="120" y1="0" x2="136" y2="-16" opacity=".35" />
-                <line x1="0" y1="120" x2="16" y2="104" opacity=".35" />
-                <line x1="120" y1="120" x2="136" y2="104" opacity=".35" />
+                <line x1="0"   y1="0"   x2="16"  y2="-16" />
+                <line x1="120" y1="0"   x2="136" y2="-16" />
+                <line x1="0"   y1="120" x2="16"  y2="104" />
+                <line x1="120" y1="120" x2="136" y2="104" />
                 {/* corner dots */}
                 {[
                   [0, 0], [120, 0], [0, 120], [120, 120],
                   [16, -16], [136, -16], [16, 104], [136, 104],
                 ].map(([cx, cy], i) => (
-                  <circle key={i} cx={cx} cy={cy} r="2.2" fill="currentColor" opacity=".35" />
+                  <circle key={i} cx={cx} cy={cy} r="2.4" fill="currentColor" opacity=".55" />
                 ))}
               </g>
             </pattern>
           </defs>
-          {/* Use the pattern to fill the viewport. Mask to fade at very top/bottom */}
+
+          {/* gentler vertical fade so the pattern shows more */}
           <rect
             width="100%"
             height="100%"
             fill="url(#cubePattern)"
             style={{
               WebkitMaskImage:
-                'linear-gradient(to bottom, transparent, black 8%, black 92%, transparent)',
+                'linear-gradient(to bottom, transparent, black 6%, black 94%, transparent)',
               maskImage:
-                'linear-gradient(to bottom, transparent, black 8%, black 92%, transparent)',
+                'linear-gradient(to bottom, transparent, black 6%, black 94%, transparent)',
             }}
           />
         </svg>
       </div>
 
-      {/* --- Layer -10: Animated color blobs --- */}
+      {/* --- Layer -10: Animated color blobs (unchanged opacity) --- */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div
           className="absolute top-[15%] left-[20%] w-20 h-20 rounded-full bg-blue-400 mix-blend-multiply filter blur-3xl opacity-50 animate-blob"
@@ -217,7 +224,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                     </svg>
                   ) : (
                     <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707" />
                     </svg>
                   )}
                 </div>
