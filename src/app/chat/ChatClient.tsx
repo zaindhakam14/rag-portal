@@ -284,15 +284,15 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                 </div>
 
                 {/* Message Bubble */}
-                <div className={`flex flex-col gap-1 max-w-2xl ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                <div className={`flex flex-col gap-1 max-w-3xl ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
                   <div
-                    className={`px-4 py-3 rounded-2xl ${
+                    className={`px-5 py-4 rounded-2xl ${
                       m.role === 'user'
                         ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md'
                         : 'bg-white/80 backdrop-blur-sm text-slate-900 shadow-sm border border-slate-200'
                     }`}
                   >
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                    <p className="text-base leading-loose whitespace-pre-wrap font-sans tracking-normal">{m.content}</p>
                   </div>
                   <span className="text-xs text-slate-400 px-2">{formatTime(m.timestamp)}</span>
                 </div>
@@ -306,7 +306,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707" />
                   </svg>
                 </div>
-                <div className="bg-white/80 backdrop-blur-sm px-4 py-3 rounded-2xl shadow-sm border border-slate-200">
+                <div className="bg-white/80 backdrop-blur-sm px-5 py-4 rounded-2xl shadow-sm border border-slate-200">
                   <div className="flex gap-1">
                     <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                     <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
