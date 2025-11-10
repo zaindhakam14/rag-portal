@@ -372,7 +372,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                 id="chat-input"
                 name="chat"
                 ref={textareaRef}
-                className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm bg-white"
+                className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm bg-white text-slate-900 placeholder-slate-400 caret-blue-600"
                 placeholder="Ask a question..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -473,6 +473,15 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         .animation-delay-8000 {
           animation-delay: 8s;
         }
+          /* Ensure black text inside the composer even when the OS/browser is in dark mode */
+          :global(textarea#chat-input) {
+            color: #0f172a;                /* Tailwind slate-900 */
+            -webkit-text-fill-color: #0f172a; /* Safari/WebKit */
+          }
+          :global(textarea#chat-input::placeholder) {
+            color: #94a3b8; /* slate-400 */
+            opacity: 1;
+          }
       `}</style>
     </div>
   );
