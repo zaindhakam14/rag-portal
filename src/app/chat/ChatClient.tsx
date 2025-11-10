@@ -16,11 +16,31 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Persist a session id per browser
+  /*
+    useEffect(() => {
+      const base = localStorage.getItem('rag-session-id') || uuid();
+      localStorage.setItem('rag-session-id', base);
+      setSessionId(`${accountId}:${base}`);
+    }, [accountId]);
+  */
+
+  // NEW: resolve a canonical session per user+account from the server
   useEffect(() => {
-    const base = localStorage.getItem('rag-session-id') || uuid();
-    localStorage.setItem('rag-session-id', base);
-    setSessionId(`${accountId}:${base}`);
-  }, [accountId]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/session/current?account=demo-account', { cache: 'no-store' });
+        const j = await res.json();
+        if (!cancelled) {
+          if (j?.sessionId) setSessionId(j.sessionId);
+          else setErr(j?.error || 'Failed to get session');
+        }
+      } catch (e: any) {
+        if (!cancelled) setErr(e?.message || 'Failed to get session');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Always show latest message
   useEffect(() => {
