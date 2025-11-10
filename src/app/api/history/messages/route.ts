@@ -1,75 +1,119 @@
+// src/app/api/history/messages/route.ts
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceClient } from '@/lib/supabase/service';
+import { createClient as createSSR } from '@/lib/supabase/server';
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const sessionId = searchParams.get('sessionId');
-  if (!sessionId) {
-    return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 });
-  }
-
-  const supabase = createServiceClient();
-
-  // Find the session by session_key
-  const { data: session, error: sessErr } = await supabase
-    .from('chat_sessions')
-    .select('id')
-    .eq('session_key', sessionId)
-    .maybeSingle();
-
-  if (sessErr) return NextResponse.json({ error: sessErr.message }, { status: 500 });
-  if (!session) return NextResponse.json({ messages: [] });
-
-  // Load messages for that session
-  const { data: rows, error: msgErr } = await supabase
-    .from('chat_messages')
-    .select('role, content, created_at')
-    .eq('session_id', session.id)
-    .order('created_at', { ascending: true });
-
-  if (msgErr) return NextResponse.json({ error: msgErr.message }, { status: 500 });
-
-  return NextResponse.json({ messages: rows ?? [] });
+function newSessionKey(prefix: string) {
+  const seg = () => Math.random().toString(36).slice(2, 12); // a-z0-9 (10 chars)
+  return `${prefix}:${seg()}${seg()}`;
 }
 
-export async function POST(req: NextRequest) {
-  const supabase = createServiceClient();
-  const body = await req.json().catch(() => null);
-  const { sessionId, messages } = body || {};
+async function getOwnedSession(
+  ssr: SupabaseClient,
+  sessionKey: string
+): Promise<
+  | { sessionRow: { id: string; account_id: string; user_id: string }; user: { id: string } }
+  | { error: string; status: 401 | 403 | 404 }
+> {
+  const { data: authData, error: authErr } = await ssr.auth.getUser();
+  if (authErr || !authData?.user) return { error: 'Unauthorized', status: 401 };
 
-  if (!sessionId || !Array.isArray(messages) || messages.length === 0) {
-    return NextResponse.json({ error: 'Bad payload' }, { status: 400 });
-  }
-
-  // Ensure a session row exists (account_id/user_id can be null)
-  let { data: session, error: sessErr } = await supabase
+  const { data: sessionRow, error: sErr } = await ssr
     .from('chat_sessions')
-    .select('id')
-    .eq('session_key', sessionId)
-    .maybeSingle();
+    .select('id, account_id, user_id')
+    .eq('session_key', sessionKey)
+    .single();
 
-  if (sessErr) return NextResponse.json({ error: sessErr.message }, { status: 500 });
+  if (sErr || !sessionRow) return { error: 'Session not found', status: 404 };
+  if (sessionRow.user_id !== authData.user.id) return { error: 'Forbidden', status: 403 };
 
-  if (!session) {
-    const { data, error } = await supabase
-      .from('chat_sessions')
-      .insert({ session_key: sessionId, title: 'Session' })
-      .select('id')
-      .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    session = data;
+  return { sessionRow, user: { id: authData.user.id } };
+}
+
+/** GET /api/history/messages?sessionId=... */
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const sessionKey = searchParams.get('sessionId') ?? '';
+    if (!sessionKey || !sessionKey.includes(':')) {
+      return NextResponse.json({ error: 'Missing or invalid sessionId' }, { status: 400 });
+    }
+
+    // IMPORTANT: await the server client factory
+    const ssr = (await createSSR()) as SupabaseClient;
+
+    const owned = await getOwnedSession(ssr, sessionKey);
+    if ('error' in owned) return NextResponse.json({ error: owned.error }, { status: owned.status });
+
+    const { data: rows, error: mErr } = await ssr
+      .from('chat_messages')
+      .select('role, content, created_at')
+      .eq('session_id', owned.sessionRow.id)
+      .order('created_at', { ascending: true });
+
+    if (mErr) return NextResponse.json({ error: mErr.message }, { status: 500 });
+
+    const messages =
+      rows?.map((r: any) => ({
+        role: r.role,
+        preview: (r.content ?? '').slice(0, 240),
+        created_at: r.created_at,
+      })) ?? [];
+
+    return NextResponse.json(messages, { status: 200 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? 'Server error' }, { status: 500 });
   }
+}
 
-  const rowsToInsert = messages.map((m: any) => ({
-    session_id: session!.id,
-    role: m.role,
-    content: m.content,
-    created_at: m.created_at ?? new Date().toISOString(),
-  }));
+/**
+ * DELETE /api/history/messages?sessionId=...&mode=reset|clear
+ * - reset (default): create a fresh session and return { sessionId }
+ * - clear|purge|delete: delete all messages in current session, return { ok, sessionId }
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const sessionKey = searchParams.get('sessionId') ?? '';
+    const mode = (searchParams.get('mode') ?? 'reset').toLowerCase();
 
-  const { error: insErr } = await supabase.from('chat_messages').insert(rowsToInsert);
-  if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+    if (!sessionKey || !sessionKey.includes(':')) {
+      return NextResponse.json({ error: 'Missing or invalid sessionId' }, { status: 400 });
+    }
 
-  return NextResponse.json({ ok: true });
+    // Await both clients (your factories may be async)
+    const ssr = (await createSSR()) as SupabaseClient;
+    const svc = (await createServiceClient()) as SupabaseClient;
+
+    const owned = await getOwnedSession(ssr, sessionKey);
+    if ('error' in owned) return NextResponse.json({ error: owned.error }, { status: owned.status });
+
+    const { sessionRow, user } = owned;
+
+    if (mode === 'clear' || mode === 'purge' || mode === 'delete') {
+      const { error: delErr } = await svc.from('chat_messages').delete().eq('session_id', sessionRow.id);
+      if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+      return NextResponse.json({ ok: true, sessionId: sessionKey }, { status: 200 });
+    }
+
+    // reset → create new session with same tenant prefix
+    const tenantPrefix = sessionKey.split(':')[0] || 'public';
+    const freshKey = newSessionKey(tenantPrefix);
+
+    const { error: insErr } = await svc.from('chat_sessions').insert({
+      user_id: user.id,
+      account_id: sessionRow.account_id,
+      title: 'New chat',
+      session_key: freshKey,
+    });
+
+    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+    return NextResponse.json({ sessionId: freshKey }, { status: 200 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? 'Server error' }, { status: 500 });
+  }
 }
