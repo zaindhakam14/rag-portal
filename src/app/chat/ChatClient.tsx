@@ -95,6 +95,17 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [msgs, loading]);
 
+  async function logout() {
+    try {
+      // Your existing server route returns 204 No Content, which is perfect.
+      await fetch('/logout', { method: 'POST' });
+    } catch {
+      // ignore; we'll still navigate away
+    } finally {
+      window.location.href = '/login';
+    }
+  }
+
   async function clearChat(mode: 'reset' | 'truncate' = 'reset') {
     if (!sessionId) return;
 
@@ -258,51 +269,65 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         <div className="absolute top-[70%] right-[20%] w-16 h-16 rounded-full bg-teal-400 mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-7000" />
       </div>
 
-      {/* Header */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200 shadow-sm relative z-10">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-slate-900">Knowledge Assistant</h1>
-              <p className="text-sm text-slate-500">Ask me anything about your business</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-          <a
-              href="https://drive.google.com/drive/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-2 rounded-lg border border-slate-200 bg-white/80 hover:bg-white shadow-sm text-sm text-slate-700 transition"
-              title="Open Google Drive (opens in new tab)"
-            >
-              <span className="inline-flex items-center gap-2">
-                {/* tiny drive icon */}
-                <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
-                  <path fill="#34A853" d="M12.9 3l4.6 8H9.8L5.2 3h7.7z"/>
-                  <path fill="#FBBC05" d="M21 17l-3.5-6H9.8L6.3 17H21z"/>
-                  <path fill="#4285F4" d="M2.9 17l6.9 4 3.4-6H6.3L2.9 17z"/>
-                </svg>
-                Drive
-              </span>
-            </a>
-            <button
-              onClick={() => clearChat('reset')}
-              disabled={loading || !sessionId}
-              className="px-3 py-2 rounded-lg border border-slate-200 bg-white/80 hover:bg-white shadow-sm text-sm text-slate-700 transition disabled:opacity-50"
-              title="Clear this conversation and start a new one"
-            >
-              Clear chat
-            </button>
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-sm text-slate-600">Online</span>
-          </div>
+  {/* Header */}
+  <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200 shadow-sm relative z-10">
+    <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547z" />
+          </svg>
+        </div>
+        <div>
+          <h1 className="text-lg font-semibold text-slate-900">Knowledge Assistant</h1>
+          <p className="text-sm text-slate-500">Ask me anything about your business</p>
         </div>
       </div>
+
+      <div className="flex items-center gap-2">
+        <a
+          href="https://drive.google.com/drive/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-3 py-2 rounded-lg border border-slate-200 bg-white/80 hover:bg-white shadow-sm text-sm text-slate-700 transition"
+          title="Open Google Drive (opens in new tab)"
+        >
+          <span className="inline-flex items-center gap-2">
+            {/* tiny drive icon */}
+            <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+              <path fill="#34A853" d="M12.9 3l4.6 8H9.8L5.2 3h7.7z"/>
+              <path fill="#FBBC05" d="M21 17l-3.5-6H9.8L6.3 17H21z"/>
+              <path fill="#4285F4" d="M2.9 17l6.9 4 3.4-6H6.3L2.9 17z"/>
+            </svg>
+            Drive
+          </span>
+        </a>
+
+        <button
+          type="button"
+          onClick={logout}
+          className="px-3 py-2 rounded-lg border border-slate-200 bg-white/80 hover:bg-white shadow-sm text-sm text-slate-700 transition"
+          title="Sign out"
+        >
+          Logout
+        </button>
+
+        <button
+          type="button"
+          onClick={() => clearChat('reset')}
+          disabled={loading || !sessionId}
+          className="px-3 py-2 rounded-lg border border-slate-200 bg-white/80 hover:bg-white shadow-sm text-sm text-slate-700 transition disabled:opacity-50"
+          title="Clear this conversation and start a new one"
+        >
+          Clear chat
+        </button>
+
+        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+        <span className="text-sm text-slate-600">Online</span>
+      </div>
+    </div>
+  </div>
+
 
       {/* Messages (scrolls) */}
       <div className="flex-1 max-w-4xl w-full mx-auto px-6 py-8 overflow-y-auto relative z-10">
