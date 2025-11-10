@@ -1,9 +1,10 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
 
-// Mock uuid for demo - in your real app, import from 'uuid'
+import { useEffect, useRef, useState } from 'react';
+
+// Simple uuid (ok for client-only ids)
 const uuid = () =>
-  Math.random().toString(36).substring(2) + Date.now().toString(36);
+  Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
 
 type Msg = { role: 'user' | 'assistant'; content: string; timestamp: Date };
 
@@ -13,17 +14,26 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const isSendingRef = useRef(false); // re-entry guard
 
-  // prevent double-sends from Enter + click, spamming, etc.
-  const sendingRef = useRef(false);
+  // Ensure light widgets even if OS is dark (also improves placeholder contrast)
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('dark');
+    root.style.colorScheme = 'light';
+  }, []);
 
-  // NEW: resolve a canonical session per user+account from the server
+  // Resolve canonical session for this user+account from server
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/session/current?account=demo-account', { cache: 'no-store' });
+        const res = await fetch(`/api/session/current?account=${encodeURIComponent(accountId)}`, {
+          cache: 'no-store',
+        });
         const j = await res.json();
         if (!cancelled) {
           if (j?.sessionId) setSessionId(j.sessionId);
@@ -33,26 +43,16 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         if (!cancelled) setErr(e?.message || 'Failed to get session');
       }
     })();
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId]);
 
-  // Always show latest message
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [msgs, loading]);
-
-  // Enforce light mode in the browser (so inputs don’t flip to dark autofill)
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove('dark');
-    root.style.colorScheme = 'light';
-  }, []);
-
-  // Load history from API when we know the sessionId
+  // Load history when session is known
   useEffect(() => {
     if (!sessionId) return;
-    let cancelled = false;
 
+    let cancelled = false;
     (async () => {
       try {
         const res = await fetch(
@@ -60,28 +60,44 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
           { cache: 'no-store' }
         );
         if (!res.ok) return;
+
         const json = await res.json();
         const rows: Array<{ role: 'user' | 'assistant'; content: string; created_at: string }> =
           json?.messages ?? [];
 
         if (!cancelled && Array.isArray(rows)) {
-          const hydrated = rows.map((r) => ({
-            role: r.role,
-            content: r.content,
-            timestamp: new Date(r.created_at),
-          }));
+          const uniq = new Set<string>();
+          const hydrated: Msg[] = [];
+          for (const r of rows) {
+            const key = `${r.role}|${r.content}|${r.created_at}`;
+            if (uniq.has(key)) continue;
+            uniq.add(key);
+            hydrated.push({
+              role: r.role,
+              content: r.content,
+              timestamp: new Date(r.created_at),
+            });
+          }
           setMsgs(hydrated);
         }
       } catch {
-        // ignore; keep local-only UI if offline
+        // ignore; keep UI usable offline
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId]);
+
+  // Keep view pinned to latest
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs, loading]);
 
   async function clearChat(mode: 'reset' | 'truncate' = 'reset') {
     if (!sessionId) return;
+
     const yes = window.confirm(
       mode === 'reset'
         ? 'Clear this conversation and start a fresh session?'
@@ -91,12 +107,18 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
 
     setLoading(true);
     setErr(null);
-
     try {
-      const url = `/api/history/messages?${new URLSearchParams({ sessionId, mode }).toString()}`;
+      const url = `/api/history/messages?${new URLSearchParams({
+        sessionId,
+        mode,
+      }).toString()}`;
+
       const res = await fetch(url, { method: 'DELETE' });
+
+      // Avoid "Unexpected end of JSON"
       const text = await res.text();
       const data = text ? JSON.parse(text) : {};
+
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 
       const nextId = data?.sessionId || sessionId;
@@ -110,21 +132,22 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
     }
   }
 
-  // SINGLE path to send messages
-  async function handleSend() {
-    const content = input.trim();
-    if (!content || loading || sendingRef.current) return;
+  // Single path to submit: the form submit handler
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    if (isSendingRef.current) return;      // guard
+    if (!input.trim() || loading) return;
 
-    sendingRef.current = true;
-    setLoading(true);
-    setErr(null);
+    isSendingRef.current = true;
 
-    const userMsg: Msg = { role: 'user', content, timestamp: new Date() };
+    const userMsg: Msg = { role: 'user', content: input.trim(), timestamp: new Date() };
     setMsgs((m) => [...m, userMsg]);
     setInput('');
+    setErr(null);
+    setLoading(true);
 
     try {
-      // ask the agent
+      // Ask agent
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -136,30 +159,43 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
       const assistantMsg: Msg = { role: 'assistant', content: reply, timestamp: new Date() };
       setMsgs((m) => [...m, assistantMsg]);
 
-      // best-effort persistence (don’t block UI on failures)
+      // Best-effort persist both turns
       try {
         await fetch('/api/history/messages', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             sessionId,
+            // include client ids if you later add a unique constraint
             messages: [
-              { role: userMsg.role, content: userMsg.content, created_at: userMsg.timestamp.toISOString() },
-              { role: assistantMsg.role, content: assistantMsg.content, created_at: assistantMsg.timestamp.toISOString() },
+              {
+                role: userMsg.role,
+                content: userMsg.content,
+                created_at: userMsg.timestamp.toISOString(),
+                client_msg_id: uuid(),
+              },
+              {
+                role: assistantMsg.role,
+                content: assistantMsg.content,
+                created_at: assistantMsg.timestamp.toISOString(),
+                client_msg_id: uuid(),
+              },
             ],
           }),
         });
-      } catch {}
+      } catch {
+        // swallow persistence errors to keep UX snappy
+      }
     } catch (e: any) {
       setErr(e?.message ?? 'Failed to send message');
     } finally {
       setLoading(false);
-      sendingRef.current = false;
+      isSendingRef.current = false;
     }
   }
 
   const formatTime = (date: Date) =>
-    date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    date.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit' });
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden">
@@ -168,14 +204,29 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         <svg className="w-full h-full text-slate-400 opacity-[0.32]" aria-hidden="true">
           <defs>
             <pattern id="cubePattern" width="220" height="220" patternUnits="userSpaceOnUse">
-              <g transform="translate(40,48)" stroke="currentColor" strokeWidth="1.25" strokeOpacity=".55" fill="none">
+              <g
+                transform="translate(40,48)"
+                stroke="currentColor"
+                strokeWidth="1.25"
+                strokeOpacity=".55"
+                fill="none"
+              >
                 <rect x="16" y="-16" width="120" height="120" />
-                <rect x="0"  y="0"    width="120" height="120" />
-                <line x1="0"   y1="0"   x2="16"  y2="-16" />
-                <line x1="120" y1="0"   x2="136" y2="-16" />
-                <line x1="0"   y1="120" x2="16"  y2="104" />
+                <rect x="0" y="0" width="120" height="120" />
+                <line x1="0" y1="0" x2="16" y2="-16" />
+                <line x1="120" y1="0" x2="136" y2="-16" />
+                <line x1="0" y1="120" x2="16" y2="104" />
                 <line x1="120" y1="120" x2="136" y2="104" />
-                {[[0,0],[120,0],[0,120],[120,120],[16,-16],[136,-16],[16,104],[136,104]].map(([cx,cy], i) => (
+                {[
+                  [0, 0],
+                  [120, 0],
+                  [0, 120],
+                  [120, 120],
+                  [16, -16],
+                  [136, -16],
+                  [16, 104],
+                  [136, 104],
+                ].map(([cx, cy], i) => (
                   <circle key={i} cx={cx} cy={cy} r="2.4" fill="currentColor" opacity=".55" />
                 ))}
               </g>
@@ -186,8 +237,10 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
             height="100%"
             fill="url(#cubePattern)"
             style={{
-              WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 6%, black 94%, transparent)',
-              maskImage: 'linear-gradient(to bottom, transparent, black 6%, black 94%, transparent)',
+              WebkitMaskImage:
+                'linear-gradient(to bottom, transparent, black 6%, black 94%, transparent)',
+              maskImage:
+                'linear-gradient(to bottom, transparent, black 6%, black 94%, transparent)',
             }}
           />
         </svg>
@@ -234,7 +287,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         </div>
       </div>
 
-      {/* Messages */}
+      {/* Messages (scrolls) */}
       <div className="flex-1 max-w-4xl w-full mx-auto px-6 py-8 overflow-y-auto relative z-10">
         {msgs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
@@ -244,7 +297,9 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
               </svg>
             </div>
             <h2 className="text-2xl font-semibold text-slate-900 mb-2">Start a conversation</h2>
-            <p className="text-slate-500 max-w-md mb-6">Ask questions about your business data, documents, and more. I'm here to help!</p>
+            <p className="text-slate-500 max-w-md mb-6">
+              Ask questions about your business data, documents, and more. I'm here to help!
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
               {[
                 'What were our sales last quarter?',
@@ -265,7 +320,10 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         ) : (
           <div className="space-y-6">
             {msgs.map((m, i) => (
-              <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'} animate-fade-in`}>
+              <div
+                key={`${m.role}-${m.timestamp.getTime()}-${i}`}
+                className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'} animate-fade-in`}
+              >
                 <div
                   className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                     m.role === 'user'
@@ -283,6 +341,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                     </svg>
                   )}
                 </div>
+
                 <div className={`flex flex-col gap-1 max-w-3xl ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
                   <div
                     className={`px-5 py-4 rounded-2xl ${
@@ -291,11 +350,11 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                         : 'bg-white/80 backdrop-blur-sm text-slate-900 shadow-sm border border-slate-200'
                     }`}
                   >
-                    <p className="text-base leading-loose whitespace-pre-wrap font-sans tracking-normal">{m.content}</p>
+                    <p className="text-base leading-loose whitespace-pre-wrap font-sans tracking-normal">
+                      {m.content}
+                    </p>
                   </div>
-                  <span className="text-xs text-slate-400 px-2">
-                    {formatTime(m.timestamp)}
-                  </span>
+                  <span className="text-xs text-slate-400 px-2">{formatTime(m.timestamp)}</span>
                 </div>
               </div>
             ))}
@@ -309,9 +368,9 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                 </div>
                 <div className="bg-white/80 backdrop-blur-sm px-5 py-4 rounded-2xl shadow-sm border border-slate-200">
                   <div className="flex gap-1">
-                    <div className="w-2 h-2 rounded-full animate-bounce bg-slate-400" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 rounded-full animate-bounce bg-slate-400" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 rounded-full animate-bounce bg-slate-400" style={{ animationDelay: '300ms' }} />
+                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                 </div>
               </div>
@@ -322,8 +381,8 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         )}
       </div>
 
-      {/* Input Area (no form submit; single send path) */}
-      <div className="bg-white/80 backdrop-blur-sm border-t border-slate-200 shadow-lg relative z-10">
+      {/* Sticky Input Area */}
+      <div className="sticky bottom-0 bg-white/80 backdrop-blur-sm border-t border-slate-200 shadow-lg z-10">
         <div className="max-w-4xl mx-auto px-6 py-4">
           {err && (
             <div className="mb-3 px-4 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
@@ -338,28 +397,34 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
             </div>
           )}
 
-          <div className="flex gap-3 items-end">
+          <form ref={formRef} onSubmit={send} className="flex gap-3 items-end">
             <div className="flex-1 relative">
               <textarea
-                className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm bg-white text-slate-900 placeholder-slate-400"
+                className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm bg-white text-slate-900 placeholder-slate-400 dark:text-slate-900 dark:placeholder-slate-500 caret-blue-600"
                 placeholder="Ask a question..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
+                    e.preventDefault(); // avoid newline
+                    if (formRef.current?.requestSubmit) {
+                      formRef.current.requestSubmit();
+                    } else {
+                      // fallback
+                      formRef.current?.dispatchEvent(
+                        new Event('submit', { cancelable: true, bubbles: true })
+                      );
+                    }
                   }
                 }}
                 rows={1}
-                style={{ minHeight: '48px', maxHeight: '120px' }}
+                style={{ minHeight: '48px', maxHeight: '120px', color: '#0f172a' }}
               />
               <div className="absolute right-3 bottom-3 text-xs text-slate-400">Enter to send</div>
             </div>
 
             <button
-              type="button"
-              onClick={handleSend}
+              type="submit"
               disabled={loading || !input.trim()}
               className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center gap-2 font-medium"
             >
@@ -384,20 +449,23 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
                 </>
               )}
             </button>
-          </div>
+          </form>
         </div>
       </div>
 
       {/* Local animations */}
       <style jsx>{`
-        @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
         :global(@keyframes blob) {
           0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(30px, -50px) scale(1.1); }
-          66% { transform: translate(-20px, 20px) scale(0.9); }
+          33%      { transform: translate(30px, -50px) scale(1.1); }
+          66%      { transform: translate(-20px, 20px) scale(0.9); }
         }
         .animate-fade-in { animation: fade-in 0.3s ease-out; }
-        .animate-blob { animation: blob 20s ease-in-out infinite; }
+        .animate-blob    { animation: blob 20s ease-in-out infinite; }
         .animation-delay-2000 { animation-delay: 2s; }
         .animation-delay-3000 { animation-delay: 3s; }
         .animation-delay-4000 { animation-delay: 4s; }
