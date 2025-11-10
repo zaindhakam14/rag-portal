@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
   const rows = messages.map(m => ({
     session_id: session.id,
     account_id: session.account_id,
+    user_id: user.id,  
     role: m.role,
     content: m.content,
     created_at: m.created_at ?? new Date().toISOString(),
