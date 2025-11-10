@@ -88,6 +88,43 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
     };
   }, [sessionId]);
 
+
+  // add near other functions in ChatClient.tsx
+  async function clearChat(mode: 'reset' | 'truncate' = 'reset') {
+    if (!sessionId) return;
+    const yes = window.confirm(
+      mode === 'reset'
+        ? 'Clear this conversation and start a fresh session?'
+        : 'Delete all messages but keep this session?'
+    );
+    if (!yes) return;
+
+    setLoading(true);
+    setErr(null);
+
+    try {
+      const r = await fetch(
+        `/api/history/messages?sessionId=${encodeURIComponent(sessionId)}&mode=${mode}`,
+        { method: 'DELETE' }
+      );
+      const j = await r.json();
+
+      if (!r.ok) throw new Error(j?.error || 'Failed to clear chat');
+
+      // Server returns { ok: true, sessionId: '...' } for mode=reset
+      const nextId = j?.sessionId || sessionId;
+
+      setMsgs([]);
+      setSessionId(nextId);            // if mode=truncate, this is unchanged
+      // (Optional) scroll to top of conversation
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to clear chat');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // NEW: send + persist both user and assistant turns
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -237,12 +274,20 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => clearChat('reset')}
+              disabled={loading || !sessionId}
+              className="px-3 py-2 rounded-lg border border-slate-200 bg-white/80 hover:bg-white shadow-sm text-sm text-slate-700 transition disabled:opacity-50"
+              title="Clear this conversation and start a new one"
+            >
+              Clear chat
+            </button>
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
             <span className="text-sm text-slate-600">Online</span>
           </div>
         </div>
       </div>
-
+      
       {/* Messages Container */}
       <div className="flex-1 max-w-4xl w-full mx-auto px-6 py-8 overflow-y-auto relative z-10">
         {msgs.length === 0 ? (
