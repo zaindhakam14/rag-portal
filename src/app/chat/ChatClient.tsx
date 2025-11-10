@@ -273,6 +273,23 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
             </div>
           </div>
           <div className="flex items-center gap-2">
+          <a
+              href="https://drive.google.com/drive/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-2 rounded-lg border border-slate-200 bg-white/80 hover:bg-white shadow-sm text-sm text-slate-700 transition"
+              title="Open Google Drive (opens in new tab)"
+            >
+              <span className="inline-flex items-center gap-2">
+                {/* tiny drive icon */}
+                <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+                  <path fill="#34A853" d="M12.9 3l4.6 8H9.8L5.2 3h7.7z"/>
+                  <path fill="#FBBC05" d="M21 17l-3.5-6H9.8L6.3 17H21z"/>
+                  <path fill="#4285F4" d="M2.9 17l6.9 4 3.4-6H6.3L2.9 17z"/>
+                </svg>
+                Drive
+              </span>
+            </a>
             <button
               onClick={() => clearChat('reset')}
               disabled={loading || !sessionId}
