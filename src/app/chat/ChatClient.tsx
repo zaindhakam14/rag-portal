@@ -1,12 +1,11 @@
 'use client';
-
 import { useEffect, useState, useRef } from 'react';
 
-type Role = 'user' | 'assistant';
-type Msg = { role: Role; content: string; timestamp: Date };
+// Mock uuid for demo - in your real app, import from 'uuid'
+const uuid = () =>
+  Math.random().toString(36).substring(2) + Date.now().toString(36);
 
-// simple id for demo
-const uuid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+type Msg = { role: 'user' | 'assistant'; content: string; timestamp: Date };
 
 export default function ChatClient({ accountId = 'demo-account' }: { accountId?: string }) {
   const [sessionId, setSessionId] = useState('');
@@ -14,11 +13,12 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Resolve a canonical session for this user/account from the server
+  // prevent double-sends from Enter + click, spamming, etc.
+  const sendingRef = useRef(false);
+
+  // NEW: resolve a canonical session per user+account from the server
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -33,70 +33,59 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         if (!cancelled) setErr(e?.message || 'Failed to get session');
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  // Enforce light mode in the browser (if Tailwind darkMode: 'class')
+  // Always show latest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs, loading]);
+
+  // Enforce light mode in the browser (so inputs don’t flip to dark autofill)
   useEffect(() => {
     const root = document.documentElement;
     root.classList.remove('dark');
     root.style.colorScheme = 'light';
   }, []);
 
-  // Load history once we have a sessionId
+  // Load history from API when we know the sessionId
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
 
     (async () => {
       try {
-        const res = await fetch(`/api/history/messages?sessionId=${encodeURIComponent(sessionId)}`, {
-          cache: 'no-store',
-        });
+        const res = await fetch(
+          `/api/history/messages?sessionId=${encodeURIComponent(sessionId)}`,
+          { cache: 'no-store' }
+        );
         if (!res.ok) return;
         const json = await res.json();
-        const rows: Array<{ role: Role; content: string; created_at: string }> = json?.messages ?? [];
+        const rows: Array<{ role: 'user' | 'assistant'; content: string; created_at: string }> =
+          json?.messages ?? [];
+
         if (!cancelled && Array.isArray(rows)) {
-          setMsgs(
-            rows.map((r) => ({
-              role: r.role,
-              content: r.content,
-              timestamp: new Date(r.created_at),
-            })),
-          );
+          const hydrated = rows.map((r) => ({
+            role: r.role,
+            content: r.content,
+            timestamp: new Date(r.created_at),
+          }));
+          setMsgs(hydrated);
         }
       } catch {
-        /* ignore offline */
+        // ignore; keep local-only UI if offline
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [sessionId]);
-
-  // Keep view pinned to latest bubble
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [msgs, loading]);
-
-  // Auto-grow textarea
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = '0px';
-    el.style.height = Math.min(el.scrollHeight, 160) + 'px';
-  }, [input]);
 
   async function clearChat(mode: 'reset' | 'truncate' = 'reset') {
     if (!sessionId) return;
-
     const yes = window.confirm(
       mode === 'reset'
         ? 'Clear this conversation and start a fresh session?'
-        : 'Delete all messages but keep this session?',
+        : 'Delete all messages but keep this session?'
     );
     if (!yes) return;
 
@@ -106,10 +95,8 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
     try {
       const url = `/api/history/messages?${new URLSearchParams({ sessionId, mode }).toString()}`;
       const res = await fetch(url, { method: 'DELETE' });
-
       const text = await res.text();
       const data = text ? JSON.parse(text) : {};
-
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 
       const nextId = data?.sessionId || sessionId;
@@ -123,29 +110,33 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
     }
   }
 
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
+  // SINGLE path to send messages
+  async function handleSend() {
+    const content = input.trim();
+    if (!content || loading || sendingRef.current) return;
 
-    const userMsg: Msg = { role: 'user', content: input.trim(), timestamp: new Date() };
+    sendingRef.current = true;
+    setLoading(true);
+    setErr(null);
+
+    const userMsg: Msg = { role: 'user', content, timestamp: new Date() };
     setMsgs((m) => [...m, userMsg]);
     setInput('');
-    setErr(null);
-    setLoading(true);
 
     try {
+      // ask the agent
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ chatInput: userMsg.content, sessionId }),
       });
       const data = await res.json();
-      const reply = (data?.reply ?? data?.text ?? data?.answer ?? data?.content ?? '…').toString();
+      const reply = (data?.reply ?? data?.text ?? '').toString();
 
       const assistantMsg: Msg = { role: 'assistant', content: reply, timestamp: new Date() };
       setMsgs((m) => [...m, assistantMsg]);
 
-      // best-effort persist
+      // best-effort persistence (don’t block UI on failures)
       try {
         await fetch('/api/history/messages', {
           method: 'POST',
@@ -158,43 +149,33 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
             ],
           }),
         });
-      } catch {
-        /* non-fatal */
-      }
+      } catch {}
     } catch (e: any) {
       setErr(e?.message ?? 'Failed to send message');
     } finally {
       setLoading(false);
+      sendingRef.current = false;
     }
   }
 
   const formatTime = (date: Date) =>
-    date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
   return (
-    <div className="min-h-[100svh] flex flex-col relative overflow-hidden">
-      {/* --- Layer -20: Pattern --- */}
+    <div className="min-h-screen flex flex-col relative overflow-hidden">
+      {/* --- Background pattern --- */}
       <div className="pointer-events-none fixed inset-0 -z-20">
         <svg className="w-full h-full text-slate-400 opacity-[0.32]" aria-hidden="true">
           <defs>
             <pattern id="cubePattern" width="220" height="220" patternUnits="userSpaceOnUse">
               <g transform="translate(40,48)" stroke="currentColor" strokeWidth="1.25" strokeOpacity=".55" fill="none">
                 <rect x="16" y="-16" width="120" height="120" />
-                <rect x="0" y="0" width="120" height="120" />
-                <line x1="0" y1="0" x2="16" y2="-16" />
-                <line x1="120" y1="0" x2="136" y2="-16" />
-                <line x1="0" y1="120" x2="16" y2="104" />
+                <rect x="0"  y="0"    width="120" height="120" />
+                <line x1="0"   y1="0"   x2="16"  y2="-16" />
+                <line x1="120" y1="0"   x2="136" y2="-16" />
+                <line x1="0"   y1="120" x2="16"  y2="104" />
                 <line x1="120" y1="120" x2="136" y2="104" />
-                {[
-                  [0, 0],
-                  [120, 0],
-                  [0, 120],
-                  [120, 120],
-                  [16, -16],
-                  [136, -16],
-                  [16, 104],
-                  [136, 104],
-                ].map(([cx, cy], i) => (
+                {[[0,0],[120,0],[0,120],[120,120],[16,-16],[136,-16],[16,104],[136,104]].map(([cx,cy], i) => (
                   <circle key={i} cx={cx} cy={cy} r="2.4" fill="currentColor" opacity=".55" />
                 ))}
               </g>
@@ -206,13 +187,13 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
             fill="url(#cubePattern)"
             style={{
               WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 6%, black 94%, transparent)',
-              maskImage: 'linear-gradient(to bottom, transparent, black 6%, transparent)',
+              maskImage: 'linear-gradient(to bottom, transparent, black 6%, black 94%, transparent)',
             }}
           />
         </svg>
       </div>
 
-      {/* --- Layer -10: Animated blobs --- */}
+      {/* --- Color blobs --- */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute top-[15%] left-[20%] w-20 h-20 rounded-full bg-blue-400 mix-blend-multiply filter blur-3xl opacity-50 animate-blob" />
         <div className="absolute top-[25%] right-[15%] w-16 h-16 rounded-full bg-purple-400 mix-blend-multiply filter blur-3xl opacity-45 animate-blob animation-delay-2000" />
@@ -225,17 +206,12 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
       </div>
 
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200 shadow-sm relative z-40">
+      <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200 shadow-sm relative z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547z"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547z" />
               </svg>
             </div>
             <div>
@@ -243,7 +219,6 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
               <p className="text-sm text-slate-500">Ask me anything about your business</p>
             </div>
           </div>
-
           <div className="flex items-center gap-2">
             <button
               onClick={() => clearChat('reset')}
@@ -259,97 +234,97 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
         </div>
       </div>
 
-      {/* Messages (scrollable). Extra bottom padding so the fixed composer never overlaps content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-6 py-6 pb-[calc(120px+env(safe-area-inset-bottom))]">
-          {msgs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-center py-16">
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center mb-6 shadow-lg">
-                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-semibold text-slate-900 mb-2">Start a conversation</h2>
-              <p className="text-slate-500 max-w-md mb-6">
-                Ask questions about your business data, documents, and more. I'm here to help!
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
-                {['What were our sales last quarter?', 'Summarize recent customer feedback', 'Show me team performance metrics', 'What are the upcoming deadlines?'].map(
-                  (suggestion, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setInput(suggestion)}
-                      className="px-4 py-3 bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/80 transition-all text-left text-sm text-slate-700 shadow-sm hover:shadow"
-                    >
-                      {suggestion}
-                    </button>
-                  ),
-                )}
-              </div>
+      {/* Messages */}
+      <div className="flex-1 max-w-4xl w-full mx-auto px-6 py-8 overflow-y-auto relative z-10">
+        {msgs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center mb-6 shadow-lg">
+              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
             </div>
-          ) : (
-            <div className="space-y-6">
-              {msgs.map((m, i) => (
-                <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'} animate-fade-in`}>
-                  {/* Avatar */}
-                  <div
-                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                      m.role === 'user' ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gradient-to-br from-slate-200 to-slate-300'
-                    }`}
-                  >
-                    {m.role === 'user' ? (
-                      <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707" />
-                      </svg>
-                    )}
-                  </div>
-
-                  {/* Bubble */}
-                  <div className={`flex flex-col gap-1 max-w-3xl ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-                    <div
-                      className={`px-5 py-4 rounded-2xl ${
-                        m.role === 'user'
-                          ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md'
-                          : 'bg-white/80 backdrop-blur-sm text-slate-900 shadow-sm border border-slate-200'
-                      }`}
-                    >
-                      <p className="text-base leading-loose whitespace-pre-wrap font-sans tracking-normal">{m.content}</p>
-                    </div>
-                    <span className="text-xs text-slate-400 px-2">{formatTime(m.timestamp)}</span>
-                  </div>
-                </div>
+            <h2 className="text-2xl font-semibold text-slate-900 mb-2">Start a conversation</h2>
+            <p className="text-slate-500 max-w-md mb-6">Ask questions about your business data, documents, and more. I'm here to help!</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
+              {[
+                'What were our sales last quarter?',
+                'Summarize recent customer feedback',
+                'Show me team performance metrics',
+                'What are the upcoming deadlines?',
+              ].map((suggestion, i) => (
+                <button
+                  key={i}
+                  onClick={() => setInput(suggestion)}
+                  className="px-4 py-3 bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/80 transition-all text-left text-sm text-slate-700 shadow-sm hover:shadow"
+                >
+                  {suggestion}
+                </button>
               ))}
-
-              {loading && (
-                <div className="flex gap-3 animate-fade-in">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center">
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {msgs.map((m, i) => (
+              <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'} animate-fade-in`}>
+                <div
+                  className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                    m.role === 'user'
+                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600'
+                      : 'bg-gradient-to-br from-slate-200 to-slate-300'
+                  }`}
+                >
+                  {m.role === 'user' ? (
+                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                    </svg>
+                  ) : (
                     <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707" />
                     </svg>
+                  )}
+                </div>
+                <div className={`flex flex-col gap-1 max-w-3xl ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  <div
+                    className={`px-5 py-4 rounded-2xl ${
+                      m.role === 'user'
+                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md'
+                        : 'bg-white/80 backdrop-blur-sm text-slate-900 shadow-sm border border-slate-200'
+                    }`}
+                  >
+                    <p className="text-base leading-loose whitespace-pre-wrap font-sans tracking-normal">{m.content}</p>
                   </div>
-                  <div className="bg-white/80 backdrop-blur-sm px-5 py-4 rounded-2xl shadow-sm border border-slate-200">
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
+                  <span className="text-xs text-slate-400 px-2">
+                    {formatTime(m.timestamp)}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {loading && (
+              <div className="flex gap-3 animate-fade-in">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707" />
+                  </svg>
+                </div>
+                <div className="bg-white/80 backdrop-blur-sm px-5 py-4 rounded-2xl shadow-sm border border-slate-200">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 rounded-full animate-bounce bg-slate-400" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 rounded-full animate-bounce bg-slate-400" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 rounded-full animate-bounce bg-slate-400" style={{ animationDelay: '300ms' }} />
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-        </div>
-      </main>
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+      </div>
 
-      {/* Fixed footer composer */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-        <div className="max-w-4xl mx-auto px-6 py-3">
+      {/* Input Area (no form submit; single send path) */}
+      <div className="bg-white/80 backdrop-blur-sm border-t border-slate-200 shadow-lg relative z-10">
+        <div className="max-w-4xl mx-auto px-6 py-4">
           {err && (
             <div className="mb-3 px-4 py-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
               <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -363,41 +338,34 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
             </div>
           )}
 
-          <form onSubmit={send} className="flex gap-3 items-end">
+          <div className="flex gap-3 items-end">
             <div className="flex-1 relative">
-              <label htmlFor="chat-input" className="sr-only">
-                Ask a question
-              </label>
               <textarea
-                id="chat-input"
-                name="chat"
-                ref={textareaRef}
-                className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm bg-white text-slate-900 placeholder-slate-400 caret-blue-600"
+                className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none shadow-sm bg-white text-slate-900 placeholder-slate-400"
                 placeholder="Ask a question..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    send(e);
+                    handleSend();
                   }
                 }}
                 rows={1}
-                autoComplete="off"
-                aria-label="Chat prompt"
-                style={{ minHeight: '48px', maxHeight: '160px' }}
+                style={{ minHeight: '48px', maxHeight: '120px' }}
               />
               <div className="absolute right-3 bottom-3 text-xs text-slate-400">Enter to send</div>
             </div>
 
             <button
-              type="submit"
+              type="button"
+              onClick={handleSend}
               disabled={loading || !input.trim()}
               className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center gap-2 font-medium"
             >
               {loading ? (
                 <>
-                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path
                       className="opacity-75"
@@ -410,78 +378,33 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
               ) : (
                 <>
                   <span>Send</span>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
                 </>
               )}
             </button>
-          </form>
-
-          <div className="h-[env(safe-area-inset-bottom)]" />
+          </div>
         </div>
       </div>
 
       {/* Local animations */}
       <style jsx>{`
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
+        @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         :global(@keyframes blob) {
-          0%,
-          100% {
-            transform: translate(0, 0) scale(1);
-          }
-          33% {
-            transform: translate(30px, -50px) scale(1.1);
-          }
-          66% {
-            transform: translate(-20px, 20px) scale(0.9);
-          }
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
         }
-        .animate-fade-in {
-          animation: fade-in 0.3s ease-out;
-        }
-        .animate-blob {
-          animation: blob 20s ease-in-out infinite;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-3000 {
-          animation-delay: 3s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-        .animation-delay-5000 {
-          animation-delay: 5s;
-        }
-        .animation-delay-6000 {
-          animation-delay: 6s;
-        }
-        .animation-delay-7000 {
-          animation-delay: 7s;
-        }
-        .animation-delay-8000 {
-          animation-delay: 8s;
-        }
-          /* Ensure black text inside the composer even when the OS/browser is in dark mode */
-          :global(textarea#chat-input) {
-            color: #0f172a;                /* Tailwind slate-900 */
-            -webkit-text-fill-color: #0f172a; /* Safari/WebKit */
-          }
-          :global(textarea#chat-input::placeholder) {
-            color: #94a3b8; /* slate-400 */
-            opacity: 1;
-          }
+        .animate-fade-in { animation: fade-in 0.3s ease-out; }
+        .animate-blob { animation: blob 20s ease-in-out infinite; }
+        .animation-delay-2000 { animation-delay: 2s; }
+        .animation-delay-3000 { animation-delay: 3s; }
+        .animation-delay-4000 { animation-delay: 4s; }
+        .animation-delay-5000 { animation-delay: 5s; }
+        .animation-delay-6000 { animation-delay: 6s; }
+        .animation-delay-7000 { animation-delay: 7s; }
+        .animation-delay-8000 { animation-delay: 8s; }
       `}</style>
     </div>
   );
