@@ -92,31 +92,36 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
   // add near other functions in ChatClient.tsx
   async function clearChat(mode: 'reset' | 'truncate' = 'reset') {
     if (!sessionId) return;
+  
     const yes = window.confirm(
       mode === 'reset'
         ? 'Clear this conversation and start a fresh session?'
         : 'Delete all messages but keep this session?'
     );
     if (!yes) return;
-
+  
     setLoading(true);
     setErr(null);
-
+  
     try {
-      const r = await fetch(
-        `/api/history/messages?sessionId=${encodeURIComponent(sessionId)}&mode=${mode}`,
-        { method: 'DELETE' }
-      );
-      const j = await r.json();
-
-      if (!r.ok) throw new Error(j?.error || 'Failed to clear chat');
-
-      // Server returns { ok: true, sessionId: '...' } for mode=reset
-      const nextId = j?.sessionId || sessionId;
-
+      const url = `/api/history/messages?${new URLSearchParams({
+        sessionId,
+        mode,
+      }).toString()}`;
+  
+      const res = await fetch(url, { method: 'DELETE' });
+  
+      // Robust parse so we never throw "Unexpected end of JSON"
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+  
+      if (!res.ok) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+  
+      const nextId = data?.sessionId || sessionId;
       setMsgs([]);
-      setSessionId(nextId);            // if mode=truncate, this is unchanged
-      // (Optional) scroll to top of conversation
+      setSessionId(nextId);
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     } catch (e: any) {
       setErr(e?.message || 'Failed to clear chat');
@@ -124,6 +129,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
       setLoading(false);
     }
   }
+  
 
   // NEW: send + persist both user and assistant turns
   async function send(e: React.FormEvent) {
@@ -287,7 +293,7 @@ export default function ChatClient({ accountId = 'demo-account' }: { accountId?:
           </div>
         </div>
       </div>
-      
+
       {/* Messages Container */}
       <div className="flex-1 max-w-4xl w-full mx-auto px-6 py-8 overflow-y-auto relative z-10">
         {msgs.length === 0 ? (
