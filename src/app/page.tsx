@@ -21,10 +21,10 @@ export default function Home() {
             </div>
           </div>
           <h1 className="text-7xl md:text-8xl font-light tracking-tight text-black leading-none">
-            the <span className="font-serif italic">KNOWLEDGE</span>
+             <span className="font-serif italic">KNOWLEDGE</span>
           </h1>
           <h2 className="text-5xl md:text-6xl font-light tracking-tight text-black">
-            <span className="font-serif">of</span> <span className="font-bold">INSIGHT</span>
+            <span className="font-serif">on</span> <span className="font-bold">tap</span>
           </h2>
         </div>
 
